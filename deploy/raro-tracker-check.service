@@ -3,6 +3,6 @@ Description=Raro Tracker - checagem de disponibilidade (oneshot)
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/rammyres/raro-tracker
-EnvironmentFile=/home/rammyres/raro-tracker/.env
-ExecStart=/home/rammyres/raro-tracker/venv/bin/python3 scheduler/check_availability.py
+WorkingDirectory=/opt/rarotracker
+EnvironmentFile=/opt/rarotracker/.env
+ExecStart=/opt/rarotracker/check_availability.py
