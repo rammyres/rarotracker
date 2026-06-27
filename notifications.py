@@ -10,6 +10,7 @@ o outro continua funcionando e o erro só é logado.
 import smtplib
 import json
 import logging
+import subprocess
 from email.mime.text import MIMEText
 
 from pywebpush import webpush, WebPushException
@@ -19,16 +20,10 @@ from config import Config
 logger = logging.getLogger("raro_tracker.notifications")
 
 
-def send_email_alert(subject, body_html, body_text=None):
-    if not (Config.SMTP_HOST and Config.ALERT_EMAIL_TO):
-        logger.warning("E-mail não configurado (SMTP_HOST/ALERT_EMAIL_TO ausentes) — pulando alerta por e-mail.")
+def _send_via_smtp(msg):
+    if not Config.SMTP_HOST:
+        logger.warning("EMAIL_BACKEND=smtp mas SMTP_HOST não configurado — pulando alerta por e-mail.")
         return False
-
-    msg = MIMEText(body_html, "html", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = Config.EMAIL_FROM
-    msg["To"] = Config.ALERT_EMAIL_TO
-
     try:
         with smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=15) as server:
             if Config.SMTP_USE_TLS:
@@ -38,8 +33,51 @@ def send_email_alert(subject, body_html, body_text=None):
             server.sendmail(Config.EMAIL_FROM, [Config.ALERT_EMAIL_TO], msg.as_string())
         return True
     except Exception as e:
-        logger.error(f"Falha ao enviar e-mail: {e}")
+        logger.error(f"Falha ao enviar e-mail via SMTP: {e}")
         return False
+
+
+def _send_via_sendmail(msg):
+    """Usa o MTA local (Postfix/Exim/msmtp) via o binário sendmail, sem
+    precisar de host/porta/usuário — útil quando o próprio servidor já
+    está configurado para enviar e-mail (ex: Postfix com SPF/rDNS ok)."""
+    try:
+        proc = subprocess.run(
+            [Config.SENDMAIL_PATH, "-t", "-i"],
+            input=msg.as_string().encode("utf-8"),
+            capture_output=True,
+            timeout=15,
+        )
+        if proc.returncode != 0:
+            logger.error(
+                f"sendmail saiu com código {proc.returncode}: {proc.stderr.decode(errors='replace')}"
+            )
+            return False
+        return True
+    except FileNotFoundError:
+        logger.error(
+            f"Binário sendmail não encontrado em {Config.SENDMAIL_PATH} — "
+            "instale Postfix/Exim/msmtp ou mude EMAIL_BACKEND para 'smtp'."
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Falha ao enviar e-mail via sendmail: {e}")
+        return False
+
+
+def send_email_alert(subject, body_html, body_text=None):
+    if not Config.ALERT_EMAIL_TO:
+        logger.warning("ALERT_EMAIL_TO não configurado — pulando alerta por e-mail.")
+        return False
+
+    msg = MIMEText(body_html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = Config.EMAIL_FROM or "raro-tracker@localhost"
+    msg["To"] = Config.ALERT_EMAIL_TO
+
+    if Config.EMAIL_BACKEND == "sendmail":
+        return _send_via_sendmail(msg)
+    return _send_via_smtp(msg)
 
 
 def send_push_alert(subscriptions, title, body, url=None):

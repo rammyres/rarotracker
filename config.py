@@ -19,7 +19,13 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # --- E-mail (SMTP genérico — funciona com Gmail app password, Resend, etc.) ---
+    # --- E-mail ---
+    # EMAIL_BACKEND: "smtp" (padrão) ou "sendmail" (usa o MTA local do
+    # servidor — Postfix/Exim/msmtp — sem precisar de host/porta/usuário).
+    EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "smtp").lower()
+    SENDMAIL_PATH = os.environ.get("SENDMAIL_PATH", "/usr/sbin/sendmail")
+
+    # --- SMTP genérico (só usado se EMAIL_BACKEND=smtp) ---
     SMTP_HOST = os.environ.get("SMTP_HOST", "")
     SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
     SMTP_USER = os.environ.get("SMTP_USER", "")

@@ -37,15 +37,32 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env
-# edite .env: pelo menos ALERT_EMAIL_TO se quiser e-mail,
-# e gere as chaves VAPID se quiser push:
-python3 deploy/generate_vapid_keys.py
-# cole as chaves geradas no .env
+python3 deploy/setup_env.py
+# assistente interativo: gera SECRET_KEY, configura e-mail (SMTP ou
+# sendmail local) e VAPID, escreve .env automaticamente.
+# (alternativa manual: cp .env.example .env e edite à mão)
 
 python3 app.py
-# abre em http://localhost:5000
+# abre em http://localhost:5050
 ```
+
+Pode rodar `python3 deploy/setup_env.py` de novo quando quiser mudar algo
+— ele pergunta antes de sobrescrever e faz backup do `.env` anterior.
+
+### E-mail: SMTP ou sendmail local — qual escolher?
+
+- **SMTP** é a opção mais simples se você já tem uma conta de e-mail
+  (Gmail, etc) ou um serviço como Resend/SendGrid. Funciona de qualquer
+  servidor, sem precisar configurar nada além de host/usuário/senha.
+- **sendmail local** usa o MTA do próprio servidor (Postfix/Exim/msmtp).
+  Não precisa de credenciais, mas a entregabilidade depende do servidor
+  ter reverse DNS, SPF e idealmente DKIM configurados — sem isso, os
+  e-mails tendem a cair em spam ou ser rejeitados pelo destinatário.
+  Bom se o servidor já envia e-mail para outras coisas (ex: relatórios
+  de cron) e você confia na configuração existente.
+
+Pra trocar depois, só editar `EMAIL_BACKEND=smtp` ou `EMAIL_BACKEND=sendmail`
+no `.env` (ou rodar o assistente de novo) — nenhum código precisa mudar.
 
 ## Deploy (systemd, mesmo padrão dos outros projetos)
 
