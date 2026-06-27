@@ -1,0 +1,10 @@
+[Unit]
+Description=Roda a checagem de disponibilidade do Raro Tracker 3x/dia
+
+[Timer]
+# 08:00, 14:00 e 20:00 (horário local do servidor)
+OnCalendar=*-*-* 08,14,20:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
