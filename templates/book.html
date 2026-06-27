@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} — Raro Tracker{% endblock %}
+
+{% block content %}
+  <div class="book-header">
+    {% if book.cover_url %}
+      <img src="{{ book.cover_url }}" alt="" class="book-cover-large">
+    {% endif %}
+    <div>
+      <h1>{{ book.title }}</h1>
+      <p class="muted">{{ book.author }}</p>
+      <p class="muted">ISBN: {{ book.display_isbn() }}{% if book.publisher %} · {{ book.publisher }}{% endif %}{% if book.edition_format %} · {{ book.edition_format }}{% endif %}</p>
+
+      <form method="POST" action="{{ url_for('check_now', book_id=book.id) }}" style="display:inline">
+        <button type="submit">🔄 Checar agora</button>
+      </form>
+      <button id="enable-push-btn" type="button">🔔 Ativar notificação no navegador</button>
+      <form method="POST" action="{{ url_for('delete_book', book_id=book.id) }}" style="display:inline" onsubmit="return confirm('Remover este livro do monitoramento?');">
+        <button type="submit" class="btn-danger">Remover</button>
+      </form>
+    </div>
+  </div>
+
+  <h2>Disponibilidade por loja</h2>
+  <table class="listing-table">
+    <thead>
+      <tr>
+        <th>Loja</th>
+        <th>Status</th>
+        <th>Preço</th>
+        <th>Frete p/ Brasil</th>
+        <th>Última checagem</th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for listing in listings %}
+        <tr>
+          <td>{{ listing.source.name }}</td>
+          <td>
+            {% if listing.available %}
+              <span class="badge badge-success">disponível</span>
+            {% elif listing.matched %}
+              <span class="badge badge-neutral">esgotado</span>
+            {% elif listing.matched is none %}
+              <span class="badge badge-warning">verificar manualmente</span>
+            {% else %}
+              <span class="badge badge-neutral">não encontrado</span>
+            {% endif %}
+            {% if listing.last_error %}
+              <div class="error-note">⚠ {{ listing.last_error }}</div>
+            {% endif %}
+          </td>
+          <td>{% if listing.price_amount %}{{ "%.2f"|format(listing.price_amount) }} {{ listing.price_currency }}{% else %}—{% endif %}</td>
+          <td>
+            {% if listing.shipping_cost_brl %}
+              R$ {{ "%.2f"|format(listing.shipping_cost_brl) }}
+              {% if listing.shipping_method %}<br><span class="muted">{{ listing.shipping_method }}</span>{% endif %}
+            {% elif listing.shipping_note %}
+              <span class="muted">{{ listing.shipping_note }}</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="muted">{{ listing.last_checked_at.strftime("%d/%m %H:%M") if listing.last_checked_at else "ainda não checado" }}</td>
+          <td>
+            {% if listing.product_url %}
+              <a href="{{ listing.product_url }}" target="_blank" rel="noopener">Abrir ↗</a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">A checagem automática roda 3x por dia. Linhas "verificar manualmente" são da Amazon, que não tem API pública viável para isso — o link de busca já filtra pelo ISBN.</p>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.VAPID_PUBLIC_KEY = {{ vapid_public_key|tojson }};
+    document.getElementById('enable-push-btn').addEventListener('click', () => {
+      if (window.subscribeToPush) window.subscribeToPush();
+    });
+  </script>
+{% endblock %}

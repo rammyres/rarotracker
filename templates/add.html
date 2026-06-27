@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Adicionar livro — Raro Tracker{% endblock %}
+
+{% block content %}
+  <h1>Adicionar livro</h1>
+  <p class="muted">Informe título e autor — vamos buscar as edições existentes (com ISBN) para você confirmar qual é a edição certa antes de começar o monitoramento.</p>
+
+  <form method="POST" class="form-card">
+    <label>Título
+      <input type="text" name="title" required placeholder="ex: O Nome do Vento">
+    </label>
+    <label>Autor
+      <input type="text" name="author" required placeholder="ex: Patrick Rothfuss">
+    </label>
+    <label>ISBN (opcional — se você já souber exatamente qual edição, pule a etapa de confirmação)
+      <input type="text" name="isbn" placeholder="ex: 9788580413280">
+    </label>
+    <button type="submit">Buscar edições</button>
+  </form>
+{% endblock %}

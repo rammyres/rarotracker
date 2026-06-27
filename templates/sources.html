@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Sites monitorados — Raro Tracker{% endblock %}
+
+{% block content %}
+  <h1>Sites monitorados</h1>
+  <p class="muted">Lojas Shopify (The Broken Binding, FairyLoot, Illumicrate, OwlCrate, Goldsboro Books) são checadas automaticamente via API pública. Amazon só gera link de busca — não há checagem automática de disponibilidade.</p>
+
+  <table class="listing-table">
+    <thead>
+      <tr><th>Nome</th><th>Domínio</th><th>Tipo</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for source in sources %}
+        <tr>
+          <td>{{ source.name }}</td>
+          <td class="muted">{{ source.domain }}</td>
+          <td class="muted">{{ "Shopify (API pública)" if source.kind == "shopify" else "Link de busca apenas" }}</td>
+          <td>
+            {% if source.enabled %}
+              <span class="badge badge-success">ativo</span>
+            {% else %}
+              <span class="badge badge-neutral">desativado</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('toggle_source', source_id=source.id) }}">
+              <button type="submit">{{ "Desativar" if source.enabled else "Ativar" }}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

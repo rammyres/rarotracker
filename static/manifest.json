@@ -1,0 +1,9 @@
+{
+  "name": "Raro Tracker",
+  "short_name": "RaroTracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf8f5",
+  "theme_color": "#7a3b2e",
+  "icons": []
+}

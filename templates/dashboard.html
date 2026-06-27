@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Meus livros — Raro Tracker{% endblock %}
+
+{% block content %}
+  <h1>Meus livros</h1>
+
+  {% if not books %}
+    <p class="empty-state">Nenhum livro adicionado ainda. <a href="{{ url_for('add_book') }}">Adicionar o primeiro</a>.</p>
+  {% else %}
+    <div class="book-grid">
+      {% for book in books %}
+        <a class="book-card" href="{{ url_for('book_detail', book_id=book.id) }}">
+          {% if book.cover_url %}
+            <img src="{{ book.cover_url }}" alt="" class="book-cover">
+          {% else %}
+            <div class="book-cover placeholder">📖</div>
+          {% endif %}
+          <div class="book-card-body">
+            <strong>{{ book.title }}</strong>
+            <span class="muted">{{ book.author }}</span>
+
+            {% if book.status == "pending_clarification" %}
+              <span class="badge badge-warning">aguardando edição</span>
+            {% else %}
+              <span class="muted">ISBN {{ book.display_isbn() }}</span>
+              {% set available_count = book.listings.filter_by(available=True).count() %}
+              {% if available_count > 0 %}
+                <span class="badge badge-success">disponível em {{ available_count }} loja(s)</span>
+              {% else %}
+                <span class="badge badge-neutral">monitorando</span>
+              {% endif %}
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

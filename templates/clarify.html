@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Confirme a edição — Raro Tracker{% endblock %}
+
+{% block content %}
+  <h1>Qual é a edição certa?</h1>
+  <p class="muted">"{{ book.title }}" de {{ book.author }} — encontramos {{ candidates|length }} edição(ões) com ISBN. Escolha a edição canônica que você quer rastrear.</p>
+
+  <form method="POST" class="candidate-list">
+    {% for c in candidates %}
+      <label class="candidate-card">
+        <input type="radio" name="candidate_id" value="{{ c.id }}" required>
+        {% if c.cover_url %}
+          <img src="{{ c.cover_url }}" alt="" class="candidate-cover">
+        {% else %}
+          <div class="candidate-cover placeholder">📖</div>
+        {% endif %}
+        <div>
+          <strong>{{ c.title }}</strong><br>
+          <span class="muted">{{ c.publisher or "Editora desconhecida" }} · {{ c.published_date or "?" }}</span><br>
+          <span class="muted">ISBN: {{ c.isbn13 or c.isbn10 }}</span><br>
+          <span class="tag">{{ c.source_api }}</span>
+        </div>
+      </label>
+    {% endfor %}
+
+    <div class="manual-isbn">
+      <p class="muted">Nenhuma dessas é a edição certa? Informe o ISBN manualmente:</p>
+      <input type="text" name="isbn" placeholder="ex: 9788580413280">
+    </div>
+
+    <button type="submit">Confirmar e começar a monitorar</button>
+  </form>
+{% endblock %}
