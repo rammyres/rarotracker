@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/rarotracker
 EnvironmentFile=/opt/rarotracker/.env
 ExecStart=/opt/rarotracker/venv/bin/gunicorn -w 2 -b 127.0.0.1:5050 app:app

@@ -3,6 +3,8 @@ Description=Raro Tracker - checagem de disponibilidade (oneshot)
 
 [Service]
 Type=oneshot
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/rarotracker
 EnvironmentFile=/opt/rarotracker/.env
-ExecStart=/opt/rarotracker/check_availability.py
+ExecStart=/opt/rarotracker/venv/bin/python3 scheduler/check_availability.py

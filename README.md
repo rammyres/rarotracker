@@ -66,8 +66,20 @@ no `.env` (ou rodar o assistente de novo) — nenhum código precisa mudar.
 
 ## Deploy (systemd, mesmo padrão dos outros projetos)
 
+Este projeto assume deploy em `/opt/rarotracker`, rodando como o usuário
+`ubuntu` (padrão das imagens da OCI — troque `User=`/`Group=` nas
+unidades em `deploy/` se usar outro usuário).
+
 ```bash
-# ajuste os caminhos em deploy/*.service para o seu usuário/diretório
+sudo mkdir -p /opt/rarotracker
+sudo chown ubuntu:ubuntu /opt/rarotracker
+# copie/extraia o projeto pra /opt/rarotracker, depois:
+cd /opt/rarotracker
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 deploy/setup_env.py
+
 sudo cp deploy/raro-tracker.service /etc/systemd/system/
 sudo cp deploy/raro-tracker-check.service /etc/systemd/system/
 sudo cp deploy/raro-tracker-check.timer /etc/systemd/system/
@@ -77,6 +89,7 @@ sudo systemctl enable --now raro-tracker.service
 sudo systemctl enable --now raro-tracker-check.timer
 
 # verificar:
+sudo systemctl status raro-tracker.service
 systemctl list-timers raro-tracker-check.timer
 journalctl -u raro-tracker-check.service -f
 ```
@@ -84,6 +97,59 @@ journalctl -u raro-tracker-check.service -f
 O timer roda às 08:00, 14:00 e 20:00 (horário local do servidor) — ajuste
 o `OnCalendar=` em `deploy/raro-tracker-check.timer` se quiser outros
 horários.
+
+`raro-tracker.service` deixa o gunicorn escutando só em `127.0.0.1:5050`
+de propósito — ele não é pra ser acessado direto de fora, só através do
+Caddy (próxima seção). Isso evita expor a aplicação sem TLS e é exigência
+do navegador pra notificação push funcionar.
+
+## Acesso de qualquer lugar com HTTPS (Caddy)
+
+Você não precisa de domínio próprio pra isso. Usamos o **sslip.io**, um
+serviço de DNS gratuito e sem cadastro: `137-131-176-138.sslip.io`
+resolve automaticamente pro IP `137.131.176.138` (o IP fica embutido no
+próprio nome). Pro Let's Encrypt, isso é um domínio público normal, então
+o Caddy consegue tirar certificado real sem você configurar nada de DNS.
+
+```bash
+# instalar o Caddy (repositório oficial — confirmado atual em 2026)
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+sudo chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+
+# editar deploy/Caddyfile trocando o IP pro seu, depois:
+sudo cp /opt/rarotracker/deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+Depois disso, `https://<seu-ip-com-hifens>.sslip.io` funciona de qualquer
+lugar — celular, outra rede, etc — com certificado válido (sem aviso de
+"site não seguro" no navegador), e o 🔔 de notificação push passa a
+funcionar porque o navegador já está num contexto seguro.
+
+### Ajustar firewall: trocar 5050 por 80/443
+
+Com o Caddy no meio, a porta 5050 não precisa mais ficar aberta pro mundo
+— só 80 (challenge do Let's Encrypt + redirect) e 443 (HTTPS). Reverta a
+regra de teste que você abriu antes:
+
+```bash
+# remove a regra de teste da porta 5050 (se você adicionou uma)
+sudo iptables -D INPUT -p tcp --dport 5050 -j ACCEPT
+
+# abre 80 e 443
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+E no console da OCI: na Security List, remova a regra de ingresso pra
+5050 e adicione regras pra 80 e 443 (TCP, origem `0.0.0.0/0`).
 
 ## Configurar e-mail (SMTP)
 
