@@ -1,11 +1,12 @@
 """
-Envio de alertas em dois canais:
-- E-mail (SMTP genérico, via smtplib — funciona com Gmail app password,
-  Resend, SendGrid SMTP relay, etc; só trocar as variáveis de ambiente)
+Envio de alertas em três canais:
+- E-mail: SMTP genérico, sendmail local, ou API HTTP da Resend
+  (EMAIL_BACKEND escolhe qual)
+- Telegram (Bot API, HTTP simples)
 - Web Push (notificação do navegador, via pywebpush + VAPID)
 
-Ambos são "best effort": se um canal falhar (ex: SMTP não configurado),
-o outro continua funcionando e o erro só é logado.
+Todos são "best effort": se um canal falhar ou não estiver configurado,
+os outros continuam funcionando e o erro só é logado.
 """
 import smtplib
 import json
@@ -111,10 +112,45 @@ def build_availability_telegram_text(book, listing, source):
     )
 
 
+def _send_via_resend(subject, body_html):
+    """Usa a API HTTP da Resend (https://api.resend.com/emails) — mais
+    simples que SMTP, só precisa da API key. A Resend exige um header
+    User-Agent em toda requisição (o requests já manda um por padrão,
+    então não precisamos setar nada extra)."""
+    if not Config.RESEND_API_KEY:
+        logger.warning("EMAIL_BACKEND=resend mas RESEND_API_KEY não configurada — pulando alerta por e-mail.")
+        return False
+    try:
+        r = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {Config.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": Config.EMAIL_FROM or "onboarding@resend.dev",
+                "to": Config.ALERT_EMAIL_TO,
+                "subject": subject,
+                "html": body_html,
+            },
+            timeout=15,
+        )
+        if r.status_code not in (200, 201):
+            logger.error(f"Resend respondeu {r.status_code}: {r.text[:300]}")
+            return False
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Falha ao enviar e-mail via Resend: {e}")
+        return False
+
+
 def send_email_alert(subject, body_html, body_text=None):
     if not Config.ALERT_EMAIL_TO:
         logger.warning("ALERT_EMAIL_TO não configurado — pulando alerta por e-mail.")
         return False
+
+    if Config.EMAIL_BACKEND == "resend":
+        return _send_via_resend(subject, body_html)
 
     msg = MIMEText(body_html, "html", "utf-8")
     msg["Subject"] = subject

@@ -49,10 +49,17 @@ python3 app.py
 Pode rodar `python3 deploy/setup_env.py` de novo quando quiser mudar algo
 — ele pergunta antes de sobrescrever e faz backup do `.env` anterior.
 
-### E-mail: SMTP ou sendmail local — qual escolher?
+### E-mail: SMTP, sendmail local ou Resend — qual escolher?
 
+- **Resend** é a opção mais simples se você já tem uma conta lá: só a API
+  key, sem host/porta/usuário/senha. Funciona de qualquer servidor (é só
+  uma chamada HTTP). Pra usar um domínio próprio no campo "From", precisa
+  verificar o domínio no painel da Resend primeiro — sem isso, dá pra
+  testar com `onboarding@resend.dev`, mas isso só funciona enviando para
+  o e-mail da própria conta Resend (limitação deles em contas não
+  verificadas).
 - **SMTP** é a opção mais simples se você já tem uma conta de e-mail
-  (Gmail, etc) ou um serviço como Resend/SendGrid. Funciona de qualquer
+  (Gmail, etc) ou outro serviço como SendGrid. Funciona de qualquer
   servidor, sem precisar configurar nada além de host/usuário/senha.
 - **sendmail local** usa o MTA do próprio servidor (Postfix/Exim/msmtp).
   Não precisa de credenciais, mas a entregabilidade depende do servidor
@@ -61,8 +68,9 @@ Pode rodar `python3 deploy/setup_env.py` de novo quando quiser mudar algo
   Bom se o servidor já envia e-mail para outras coisas (ex: relatórios
   de cron) e você confia na configuração existente.
 
-Pra trocar depois, só editar `EMAIL_BACKEND=smtp` ou `EMAIL_BACKEND=sendmail`
-no `.env` (ou rodar o assistente de novo) — nenhum código precisa mudar.
+Pra trocar depois, só editar `EMAIL_BACKEND=smtp`, `EMAIL_BACKEND=sendmail`
+ou `EMAIL_BACKEND=resend` no `.env` (ou rodar o assistente de novo) —
+nenhum código precisa mudar.
 
 ## Deploy (systemd, mesmo padrão dos outros projetos)
 
