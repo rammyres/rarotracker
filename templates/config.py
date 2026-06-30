@@ -20,10 +20,11 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # --- E-mail ---
-    # EMAIL_BACKEND: "smtp" (padrão) ou "sendmail" (usa o MTA local do
-    # servidor — Postfix/Exim/msmtp — sem precisar de host/porta/usuário).
+    # EMAIL_BACKEND: "smtp" (padrão), "sendmail" (MTA local) ou "resend"
+    # (API HTTP da Resend — resend.com).
     EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "smtp").lower()
     SENDMAIL_PATH = os.environ.get("SENDMAIL_PATH", "/usr/sbin/sendmail")
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
     # --- SMTP genérico (só usado se EMAIL_BACKEND=smtp) ---
     SMTP_HOST = os.environ.get("SMTP_HOST", "")

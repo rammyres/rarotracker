@@ -1,0 +1,15 @@
+# Caddyfile do Raro Tracker.
+#
+# Não precisa de domínio próprio: sslip.io é um serviço de DNS gratuito,
+# sem cadastro, que resolve <ip-com-hifens>.sslip.io para o IP embutido
+# no próprio nome. Caddy consegue tirar um certificado Let's Encrypt
+# real pra esse nome, porque pro Let's Encrypt ele é só um domínio público
+# normal.
+#
+# Troque 137-131-176-138 pelo SEU IP público da OCI (com hífens no lugar
+# dos pontos). Se um dia você registrar um domínio de verdade, só troca
+# essa linha — o resto continua igual.
+
+137-131-176-138.sslip.io {
+    reverse_proxy 127.0.0.1:5050
+}

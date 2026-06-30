@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Configurações — Raro Tracker{% endblock %}
+
+{% block content %}
+  <h1>Notificações</h1>
+  <p class="muted">
+    Aqui você define quem recebe os alertas quando um livro fica disponível.
+    Esses valores ficam salvos no banco e têm prioridade sobre o <code>.env</code>
+    do servidor — se deixar em branco, o app volta a usar o que estiver
+    configurado lá (se houver).
+  </p>
+
+  <form method="POST" class="form-card" style="max-width: 600px;">
+    <label>E-mail para receber alertas
+      <input type="text" name="alert_email_to" value="{{ settings.alert_email_to or '' }}"
+             placeholder="{{ env_email or 'seu-email@exemplo.com' }}">
+    </label>
+    {% if env_email and not settings.alert_email_to %}
+      <p class="muted">Atualmente usando o valor do .env: {{ env_email }}</p>
+    {% endif %}
+
+    <label>Telegram — Bot Token
+      <input type="text" name="telegram_bot_token" value="{{ settings.telegram_bot_token or '' }}"
+             placeholder="{{ '(definido no .env)' if env_telegram_token else '123456789:AAFake-Token' }}">
+    </label>
+    <label>Telegram — Chat ID
+      <input type="text" name="telegram_chat_id" value="{{ settings.telegram_chat_id or '' }}"
+             placeholder="{{ env_telegram_chat or '987654321' }}">
+    </label>
+    <p class="muted">
+      Não sabe seu chat ID? Fale com <b>@userinfobot</b> no Telegram, ou mande
+      uma mensagem pro seu bot e abra
+      <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> no navegador.
+    </p>
+
+    <button type="submit">Salvar</button>
+  </form>
+
+  <h2>Testar</h2>
+  <p class="muted">Depois de salvar, use os botões abaixo para confirmar que cada canal está funcionando.</p>
+  <form method="POST" action="{{ url_for('test_email') }}" style="display:inline">
+    <button type="submit">✉️ Enviar e-mail de teste</button>
+  </form>
+  <form method="POST" action="{{ url_for('test_telegram') }}" style="display:inline">
+    <button type="submit">📨 Enviar mensagem de teste no Telegram</button>
+  </form>
+
+  <h2>Notificação push no navegador</h2>
+  <p class="muted">
+    Diferente de e-mail/Telegram, o push é por navegador, não por conta —
+    ative em cada dispositivo/navegador que você quiser que receba alertas,
+    na página de qualquer livro (botão "🔔 Ativar notificação no navegador").
+    Exige HTTPS para funcionar.
+  </p>
+{% endblock %}

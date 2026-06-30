@@ -1,11 +1,12 @@
 """
-Envio de alertas em dois canais:
-- E-mail (SMTP genérico, via smtplib — funciona com Gmail app password,
-  Resend, SendGrid SMTP relay, etc; só trocar as variáveis de ambiente)
+Envio de alertas em três canais:
+- E-mail: SMTP genérico, sendmail local, ou API HTTP da Resend
+  (EMAIL_BACKEND escolhe qual)
+- Telegram (Bot API, HTTP simples)
 - Web Push (notificação do navegador, via pywebpush + VAPID)
 
-Ambos são "best effort": se um canal falhar (ex: SMTP não configurado),
-o outro continua funcionando e o erro só é logado.
+Todos são "best effort": se um canal falhar ou não estiver configurado,
+os outros continuam funcionando e o erro só é logado.
 """
 import smtplib
 import json
@@ -21,6 +22,21 @@ from config import Config
 logger = logging.getLogger("raro_tracker.notifications")
 
 
+def _effective_alert_email():
+    """DB (configurado pela UI em /settings) tem prioridade sobre .env."""
+    from models import AppSettings
+    settings = AppSettings.get()
+    return settings.alert_email_to or Config.ALERT_EMAIL_TO
+
+
+def _effective_telegram():
+    from models import AppSettings
+    settings = AppSettings.get()
+    token = settings.telegram_bot_token or Config.TELEGRAM_BOT_TOKEN
+    chat_id = settings.telegram_chat_id or Config.TELEGRAM_CHAT_ID
+    return token, chat_id
+
+
 def _send_via_smtp(msg):
     if not Config.SMTP_HOST:
         logger.warning("EMAIL_BACKEND=smtp mas SMTP_HOST não configurado — pulando alerta por e-mail.")
@@ -31,7 +47,7 @@ def _send_via_smtp(msg):
                 server.starttls()
             if Config.SMTP_USER:
                 server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
-            server.sendmail(Config.EMAIL_FROM, [Config.ALERT_EMAIL_TO], msg.as_string())
+            server.sendmail(Config.EMAIL_FROM, [msg["To"]], msg.as_string())
         return True
     except Exception as e:
         logger.error(f"Falha ao enviar e-mail via SMTP: {e}")
@@ -70,16 +86,17 @@ def send_telegram_alert(text):
     """Envia uma mensagem via Telegram Bot API (HTTP simples — não precisa
     da lib python-telegram-bot aqui, só enviamos, não recebemos comandos).
     Best-effort: se não configurado ou falhar, só loga e segue o jogo."""
-    if not (Config.TELEGRAM_BOT_TOKEN and Config.TELEGRAM_CHAT_ID):
-        logger.warning("Telegram não configurado (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ausentes) — pulando.")
+    bot_token, chat_id = _effective_telegram()
+    if not (bot_token and chat_id):
+        logger.warning("Telegram não configurado (token/chat_id ausentes) — pulando.")
         return False
 
-    url = f"https://api.telegram.org/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
         r = requests.post(
             url,
             json={
-                "chat_id": Config.TELEGRAM_CHAT_ID,
+                "chat_id": chat_id,
                 "text": text,
                 "parse_mode": "HTML",
                 "disable_web_page_preview": False,
@@ -111,15 +128,51 @@ def build_availability_telegram_text(book, listing, source):
     )
 
 
-def send_email_alert(subject, body_html, body_text=None):
-    if not Config.ALERT_EMAIL_TO:
-        logger.warning("ALERT_EMAIL_TO não configurado — pulando alerta por e-mail.")
+def _send_via_resend(subject, body_html, to_addr):
+    """Usa a API HTTP da Resend (https://api.resend.com/emails) — mais
+    simples que SMTP, só precisa da API key. A Resend exige um header
+    User-Agent em toda requisição (o requests já manda um por padrão,
+    então não precisamos setar nada extra)."""
+    if not Config.RESEND_API_KEY:
+        logger.warning("EMAIL_BACKEND=resend mas RESEND_API_KEY não configurada — pulando alerta por e-mail.")
         return False
+    try:
+        r = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {Config.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": Config.EMAIL_FROM or "onboarding@resend.dev",
+                "to": to_addr,
+                "subject": subject,
+                "html": body_html,
+            },
+            timeout=15,
+        )
+        if r.status_code not in (200, 201):
+            logger.error(f"Resend respondeu {r.status_code}: {r.text[:300]}")
+            return False
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Falha ao enviar e-mail via Resend: {e}")
+        return False
+
+
+def send_email_alert(subject, body_html, body_text=None):
+    to_addr = _effective_alert_email()
+    if not to_addr:
+        logger.warning("Nenhum e-mail de alerta configurado (nem em /settings, nem em ALERT_EMAIL_TO) — pulando.")
+        return False
+
+    if Config.EMAIL_BACKEND == "resend":
+        return _send_via_resend(subject, body_html, to_addr)
 
     msg = MIMEText(body_html, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"] = Config.EMAIL_FROM or "raro-tracker@localhost"
-    msg["To"] = Config.ALERT_EMAIL_TO
+    msg["To"] = to_addr
 
     if Config.EMAIL_BACKEND == "sendmail":
         return _send_via_sendmail(msg)

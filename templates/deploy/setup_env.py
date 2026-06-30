@@ -69,9 +69,10 @@ def main():
     env["ALERT_EMAIL_TO"] = ask("E-mail que vai receber os alertas de disponibilidade")
 
     print("\n--- E-mail ---")
-    print("1) SMTP (Gmail, Resend, SendGrid, etc — precisa de host/usuário/senha)")
+    print("1) SMTP (Gmail, SendGrid, etc — precisa de host/usuário/senha)")
     print("2) sendmail local (usa o Postfix/Exim/msmtp já configurado neste servidor)")
-    print("3) Pular (não enviar e-mail, só notificação push no navegador)")
+    print("3) Resend (API HTTP — só precisa da API key, sem SMTP)")
+    print("4) Pular (não enviar e-mail, só notificação push no navegador / Telegram)")
     choice = ask("Escolha", default="1")
 
     if choice == "2":
@@ -83,6 +84,14 @@ def main():
             "configurados; sem isso, os e-mails podem cair em spam."
         )
     elif choice == "3":
+        env["EMAIL_BACKEND"] = "resend"
+        env["RESEND_API_KEY"] = ask("RESEND_API_KEY (re_...)")
+        env["EMAIL_FROM"] = ask(
+            "Endereço de 'From' (precisa ser de um domínio verificado na Resend, "
+            "ou use onboarding@resend.dev pra testar)",
+            default="onboarding@resend.dev",
+        )
+    elif choice == "4":
         env["EMAIL_BACKEND"] = "smtp"  # default, mas sem host configurado = desativado
         env["ALERT_EMAIL_TO"] = env.get("ALERT_EMAIL_TO", "")
         print("  E-mail desativado — você pode configurar depois rodando este assistente de novo.")
@@ -136,6 +145,8 @@ def main():
     ]
     if env.get("EMAIL_BACKEND") == "sendmail":
         lines += [f"SENDMAIL_PATH={env.get('SENDMAIL_PATH', '/usr/sbin/sendmail')}"]
+    elif env.get("EMAIL_BACKEND") == "resend":
+        lines += [f"RESEND_API_KEY={env.get('RESEND_API_KEY', '')}"]
     else:
         lines += [
             f"SMTP_HOST={env.get('SMTP_HOST', '')}",

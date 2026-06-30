@@ -110,6 +110,28 @@ class PushSubscription(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class AppSettings(db.Model):
+    """Configuração de notificação editável pela UI (sobrepõe as variáveis
+    de ambiente quando preenchida). Linha única (id=1)."""
+
+    __tablename__ = "app_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    alert_email_to = db.Column(db.String(300))
+    telegram_bot_token = db.Column(db.String(300))
+    telegram_chat_id = db.Column(db.String(100))
+
+    @classmethod
+    def get(cls):
+        settings = cls.query.get(1)
+        if not settings:
+            settings = cls(id=1)
+            db.session.add(settings)
+            db.session.commit()
+        return settings
+
+
 class NotificationLog(db.Model):
     """Histórico de alertas enviados, para não notificar duplicado."""
 

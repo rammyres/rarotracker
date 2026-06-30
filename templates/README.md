@@ -49,10 +49,17 @@ python3 app.py
 Pode rodar `python3 deploy/setup_env.py` de novo quando quiser mudar algo
 — ele pergunta antes de sobrescrever e faz backup do `.env` anterior.
 
-### E-mail: SMTP ou sendmail local — qual escolher?
+### E-mail: SMTP, sendmail local ou Resend — qual escolher?
 
+- **Resend** é a opção mais simples se você já tem uma conta lá: só a API
+  key, sem host/porta/usuário/senha. Funciona de qualquer servidor (é só
+  uma chamada HTTP). Pra usar um domínio próprio no campo "From", precisa
+  verificar o domínio no painel da Resend primeiro — sem isso, dá pra
+  testar com `onboarding@resend.dev`, mas isso só funciona enviando para
+  o e-mail da própria conta Resend (limitação deles em contas não
+  verificadas).
 - **SMTP** é a opção mais simples se você já tem uma conta de e-mail
-  (Gmail, etc) ou um serviço como Resend/SendGrid. Funciona de qualquer
+  (Gmail, etc) ou outro serviço como SendGrid. Funciona de qualquer
   servidor, sem precisar configurar nada além de host/usuário/senha.
 - **sendmail local** usa o MTA do próprio servidor (Postfix/Exim/msmtp).
   Não precisa de credenciais, mas a entregabilidade depende do servidor
@@ -61,13 +68,26 @@ Pode rodar `python3 deploy/setup_env.py` de novo quando quiser mudar algo
   Bom se o servidor já envia e-mail para outras coisas (ex: relatórios
   de cron) e você confia na configuração existente.
 
-Pra trocar depois, só editar `EMAIL_BACKEND=smtp` ou `EMAIL_BACKEND=sendmail`
-no `.env` (ou rodar o assistente de novo) — nenhum código precisa mudar.
+Pra trocar depois, só editar `EMAIL_BACKEND=smtp`, `EMAIL_BACKEND=sendmail`
+ou `EMAIL_BACKEND=resend` no `.env` (ou rodar o assistente de novo) —
+nenhum código precisa mudar.
 
 ## Deploy (systemd, mesmo padrão dos outros projetos)
 
+Este projeto assume deploy em `/opt/rarotracker`, rodando como o usuário
+`ubuntu` (padrão das imagens da OCI — troque `User=`/`Group=` nas
+unidades em `deploy/` se usar outro usuário).
+
 ```bash
-# ajuste os caminhos em deploy/*.service para o seu usuário/diretório
+sudo mkdir -p /opt/rarotracker
+sudo chown ubuntu:ubuntu /opt/rarotracker
+# copie/extraia o projeto pra /opt/rarotracker, depois:
+cd /opt/rarotracker
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 deploy/setup_env.py
+
 sudo cp deploy/raro-tracker.service /etc/systemd/system/
 sudo cp deploy/raro-tracker-check.service /etc/systemd/system/
 sudo cp deploy/raro-tracker-check.timer /etc/systemd/system/
@@ -77,6 +97,7 @@ sudo systemctl enable --now raro-tracker.service
 sudo systemctl enable --now raro-tracker-check.timer
 
 # verificar:
+sudo systemctl status raro-tracker.service
 systemctl list-timers raro-tracker-check.timer
 journalctl -u raro-tracker-check.service -f
 ```
@@ -84,6 +105,66 @@ journalctl -u raro-tracker-check.service -f
 O timer roda às 08:00, 14:00 e 20:00 (horário local do servidor) — ajuste
 o `OnCalendar=` em `deploy/raro-tracker-check.timer` se quiser outros
 horários.
+
+`raro-tracker.service` está configurado para escutar em `0.0.0.0:5050`
+(acessível direto, sem proxy na frente) — esse é o setup atual em uso.
+Isso significa **HTTP simples, sem TLS**: funciona em qualquer lugar, mas
+sem criptografia, e a notificação push do navegador (🔔) não vai
+funcionar, porque navegadores exigem HTTPS pra registrar o service
+worker. E-mail e Telegram não são afetados por essa limitação.
+
+Se mais pra frente você quiser HTTPS (e push funcionando), a seção
+abaixo mostra como colocar o Caddy na frente — nesse caso, troque o bind
+do gunicorn de volta pra `127.0.0.1:5050` no `deploy/raro-tracker.service`
+antes de configurar o Caddy.
+
+## Acesso de qualquer lugar com HTTPS (Caddy) — opcional, não usado no setup atual
+
+Você não precisa de domínio próprio pra isso. Usamos o **sslip.io**, um
+serviço de DNS gratuito e sem cadastro: `137-131-176-138.sslip.io`
+resolve automaticamente pro IP `137.131.176.138` (o IP fica embutido no
+próprio nome). Pro Let's Encrypt, isso é um domínio público normal, então
+o Caddy consegue tirar certificado real sem você configurar nada de DNS.
+
+```bash
+# instalar o Caddy (repositório oficial — confirmado atual em 2026)
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+sudo chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+
+# editar deploy/Caddyfile trocando o IP pro seu, depois:
+sudo cp /opt/rarotracker/deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+Depois disso, `https://<seu-ip-com-hifens>.sslip.io` funciona de qualquer
+lugar — celular, outra rede, etc — com certificado válido (sem aviso de
+"site não seguro" no navegador), e o 🔔 de notificação push passa a
+funcionar porque o navegador já está num contexto seguro.
+
+### Ajustar firewall: trocar 5050 por 80/443
+
+Com o Caddy no meio, a porta 5050 não precisa mais ficar aberta pro mundo
+— só 80 (challenge do Let's Encrypt + redirect) e 443 (HTTPS). Reverta a
+regra de teste que você abriu antes:
+
+```bash
+# remove a regra de teste da porta 5050 (se você adicionou uma)
+sudo iptables -D INPUT -p tcp --dport 5050 -j ACCEPT
+
+# abre 80 e 443
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+E no console da OCI: na Security List, remova a regra de ingresso pra
+5050 e adicione regras pra 80 e 443 (TCP, origem `0.0.0.0/0`).
 
 ## Configurar e-mail (SMTP)
 
@@ -100,6 +181,18 @@ Qualquer provedor SMTP funciona — preencha `SMTP_HOST`, `SMTP_PORT`,
 
 ## Configurar Telegram (gratuito)
 
+Você pode configurar e-mail e Telegram direto pela interface web, em
+**Notificações** no menu (`/settings`) — não precisa editar `.env` nem
+reiniciar o serviço. Lá também tem botões pra mandar uma mensagem de
+teste em cada canal, pra confirmar que está funcionando antes de
+depender disso.
+
+O que vai no `.env` continua funcionando como valor padrão (útil se você
+preferir configurar uma vez via `setup_env.py` e nunca mais mexer) — o
+que for preenchido em `/settings` tem prioridade.
+
+Passo a passo pra criar o bot e achar o chat ID:
+
 1. No Telegram, fale com **@BotFather**, envie `/newbot` e siga as
    instruções (nome, username terminando em `bot`). Ele te dá um token
    tipo `123456789:AAFake-Token-Aqui`.
@@ -109,8 +202,8 @@ Qualquer provedor SMTP funciona — preencha `SMTP_HOST`, `SMTP_PORT`,
    — o `chat_id` aparece no JSON retornado (`message.chat.id`).
    Alternativa mais simples: fale com **@userinfobot**, ele te devolve
    seu próprio chat ID direto.
-3. Cole `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` no `.env` (ou rode o
-   assistente `deploy/setup_env.py`, que já pergunta isso).
+3. Cole o token e o chat ID em `/settings` na interface web (ou no
+   `.env`, se preferir — veja `deploy/setup_env.py`).
 
 Esse canal usa só uma chamada HTTP simples à Bot API (sem precisar da lib
 `python-telegram-bot`, já que aqui só enviamos mensagens, não recebemos
@@ -122,6 +215,28 @@ tenha rodando.
 Não precisa escrever código novo — insira uma linha em `adapters/registry.py`
 (`DEFAULT_SOURCES`) com `kind="shopify"` e o domínio, ou insira direto na
 tabela `sources` do banco. O adapter genérico cuida do resto.
+
+`DEFAULT_SOURCES` só é usado pra popular a tabela `sources` na primeira
+vez que o app roda (tabela vazia). Se você já tem um deploy rodando e
+o domínio de uma loja mudou (ex: The Broken Binding migrou pra
+`thebrokenbindingsub.com`), atualizar `registry.py` não muda o banco já
+existente — rode isto uma vez pra corrigir:
+
+```bash
+cd /opt/rarotracker && source venv/bin/activate
+python3 -c "
+from app import create_app
+from models import db, Source
+app = create_app()
+with app.app_context():
+    s = Source.query.filter_by(name='The Broken Binding').first()
+    if s:
+        s.domain = 'thebrokenbindingsub.com'
+        db.session.commit()
+        print('Atualizado:', s.domain)
+"
+sudo systemctl restart raro-tracker
+```
 
 ## Limitações conhecidas / coisas para ficar de olho
 

@@ -106,12 +106,19 @@ O timer roda às 08:00, 14:00 e 20:00 (horário local do servidor) — ajuste
 o `OnCalendar=` em `deploy/raro-tracker-check.timer` se quiser outros
 horários.
 
-`raro-tracker.service` deixa o gunicorn escutando só em `127.0.0.1:5050`
-de propósito — ele não é pra ser acessado direto de fora, só através do
-Caddy (próxima seção). Isso evita expor a aplicação sem TLS e é exigência
-do navegador pra notificação push funcionar.
+`raro-tracker.service` está configurado para escutar em `0.0.0.0:5050`
+(acessível direto, sem proxy na frente) — esse é o setup atual em uso.
+Isso significa **HTTP simples, sem TLS**: funciona em qualquer lugar, mas
+sem criptografia, e a notificação push do navegador (🔔) não vai
+funcionar, porque navegadores exigem HTTPS pra registrar o service
+worker. E-mail e Telegram não são afetados por essa limitação.
 
-## Acesso de qualquer lugar com HTTPS (Caddy)
+Se mais pra frente você quiser HTTPS (e push funcionando), a seção
+abaixo mostra como colocar o Caddy na frente — nesse caso, troque o bind
+do gunicorn de volta pra `127.0.0.1:5050` no `deploy/raro-tracker.service`
+antes de configurar o Caddy.
+
+## Acesso de qualquer lugar com HTTPS (Caddy) — opcional, não usado no setup atual
 
 Você não precisa de domínio próprio pra isso. Usamos o **sslip.io**, um
 serviço de DNS gratuito e sem cadastro: `137-131-176-138.sslip.io`
@@ -174,6 +181,18 @@ Qualquer provedor SMTP funciona — preencha `SMTP_HOST`, `SMTP_PORT`,
 
 ## Configurar Telegram (gratuito)
 
+Você pode configurar e-mail e Telegram direto pela interface web, em
+**Notificações** no menu (`/settings`) — não precisa editar `.env` nem
+reiniciar o serviço. Lá também tem botões pra mandar uma mensagem de
+teste em cada canal, pra confirmar que está funcionando antes de
+depender disso.
+
+O que vai no `.env` continua funcionando como valor padrão (útil se você
+preferir configurar uma vez via `setup_env.py` e nunca mais mexer) — o
+que for preenchido em `/settings` tem prioridade.
+
+Passo a passo pra criar o bot e achar o chat ID:
+
 1. No Telegram, fale com **@BotFather**, envie `/newbot` e siga as
    instruções (nome, username terminando em `bot`). Ele te dá um token
    tipo `123456789:AAFake-Token-Aqui`.
@@ -183,8 +202,8 @@ Qualquer provedor SMTP funciona — preencha `SMTP_HOST`, `SMTP_PORT`,
    — o `chat_id` aparece no JSON retornado (`message.chat.id`).
    Alternativa mais simples: fale com **@userinfobot**, ele te devolve
    seu próprio chat ID direto.
-3. Cole `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` no `.env` (ou rode o
-   assistente `deploy/setup_env.py`, que já pergunta isso).
+3. Cole o token e o chat ID em `/settings` na interface web (ou no
+   `.env`, se preferir — veja `deploy/setup_env.py`).
 
 Esse canal usa só uma chamada HTTP simples à Bot API (sem precisar da lib
 `python-telegram-bot`, já que aqui só enviamos mensagens, não recebemos
@@ -196,6 +215,28 @@ tenha rodando.
 Não precisa escrever código novo — insira uma linha em `adapters/registry.py`
 (`DEFAULT_SOURCES`) com `kind="shopify"` e o domínio, ou insira direto na
 tabela `sources` do banco. O adapter genérico cuida do resto.
+
+`DEFAULT_SOURCES` só é usado pra popular a tabela `sources` na primeira
+vez que o app roda (tabela vazia). Se você já tem um deploy rodando e
+o domínio de uma loja mudou (ex: The Broken Binding migrou pra
+`thebrokenbindingsub.com`), atualizar `registry.py` não muda o banco já
+existente — rode isto uma vez pra corrigir:
+
+```bash
+cd /opt/rarotracker && source venv/bin/activate
+python3 -c "
+from app import create_app
+from models import db, Source
+app = create_app()
+with app.app_context():
+    s = Source.query.filter_by(name='The Broken Binding').first()
+    if s:
+        s.domain = 'thebrokenbindingsub.com'
+        db.session.commit()
+        print('Atualizado:', s.domain)
+"
+sudo systemctl restart raro-tracker
+```
 
 ## Limitações conhecidas / coisas para ficar de olho
 

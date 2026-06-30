@@ -22,7 +22,7 @@ ADAPTER_REGISTRY = {
 }
 
 DEFAULT_SOURCES = [
-    {"name": "The Broken Binding", "domain": "thebrokenbinding.com", "kind": "shopify"},
+    {"name": "The Broken Binding", "domain": "thebrokenbindingsub.com", "kind": "shopify"},
     {"name": "FairyLoot", "domain": "fairyloot.com", "kind": "shopify"},
     {"name": "Illumicrate", "domain": "illumicrate.com", "kind": "shopify"},
     {"name": "OwlCrate", "domain": "owlcrate.com", "kind": "shopify"},

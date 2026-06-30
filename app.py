@@ -4,10 +4,11 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 
 from config import Config
-from models import db, Book, CandidateEdition, Source, Listing, PushSubscription
+from models import db, Book, CandidateEdition, Source, Listing, PushSubscription, AppSettings
 from adapters.registry import DEFAULT_SOURCES
 import isbn_resolver
 from checker import check_book_against_source, notify_availability
+from notifications import send_email_alert, send_telegram_alert
 
 
 def create_app():
@@ -174,6 +175,46 @@ def register_routes(app):
         source.enabled = not source.enabled
         db.session.commit()
         return redirect(url_for("sources_list"))
+
+    # ---------- Configurações de notificação (e-mail / Telegram) ----------
+
+    @app.route("/settings", methods=["GET", "POST"])
+    def settings_page():
+        settings = AppSettings.get()
+
+        if request.method == "POST":
+            settings.alert_email_to = request.form.get("alert_email_to", "").strip() or None
+            settings.telegram_bot_token = request.form.get("telegram_bot_token", "").strip() or None
+            settings.telegram_chat_id = request.form.get("telegram_chat_id", "").strip() or None
+            db.session.commit()
+            flash("Configurações salvas.", "success")
+            return redirect(url_for("settings_page"))
+
+        return render_template(
+            "settings.html",
+            settings=settings,
+            env_email=Config.ALERT_EMAIL_TO,
+            env_telegram_token=Config.TELEGRAM_BOT_TOKEN,
+            env_telegram_chat=Config.TELEGRAM_CHAT_ID,
+            vapid_public_key=Config.VAPID_PUBLIC_KEY,
+        )
+
+    @app.route("/settings/test-email", methods=["POST"])
+    def test_email():
+        ok = send_email_alert(
+            "📚 Teste — Raro Tracker",
+            "<p>Se você recebeu isso, o alerta por e-mail está funcionando.</p>",
+        )
+        flash("E-mail de teste enviado." if ok else "Falha ao enviar e-mail de teste — veja os logs do servidor.",
+              "success" if ok else "error")
+        return redirect(url_for("settings_page"))
+
+    @app.route("/settings/test-telegram", methods=["POST"])
+    def test_telegram():
+        ok = send_telegram_alert("📚 Teste — Raro Tracker: se você recebeu isso, o alerta por Telegram está funcionando.")
+        flash("Mensagem de teste enviada no Telegram." if ok else "Falha ao enviar mensagem de teste — veja os logs do servidor.",
+              "success" if ok else "error")
+        return redirect(url_for("settings_page"))
 
     # ---------- Web Push ----------
 
